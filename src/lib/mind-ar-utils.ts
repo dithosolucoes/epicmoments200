@@ -22,7 +22,12 @@ export async function initMindAR(container: HTMLElement, imageData: ArrayBuffer,
 
   // Criar a cena AR
   const sceneEl = document.createElement('a-scene');
-  sceneEl.setAttribute('mindar-image', `imageTargetSrc: ${URL.createObjectURL(new Blob([imageData]))}`);
+  sceneEl.setAttribute('mindar-image', {
+    imageTargetSrc: URL.createObjectURL(new Blob([imageData])),
+    maxTrack: 1,
+    filterMinCF: 0.0001,
+    filterBeta: 0.001,
+  });
   sceneEl.setAttribute('embedded', '');
   sceneEl.setAttribute('color-space', 'sRGB');
   sceneEl.setAttribute('renderer', 'colorManagement: true, physicallyCorrectLights');
@@ -41,6 +46,7 @@ export async function initMindAR(container: HTMLElement, imageData: ArrayBuffer,
   videoEl.setAttribute('width', '1');
   videoEl.setAttribute('height', '0.552');
   videoEl.setAttribute('position', '0 0 0');
+  videoEl.setAttribute('play-on-click', '');
   
   // Criar entidade target que mostrará o vídeo quando a estampa for detectada
   const target = document.createElement('a-entity');
@@ -51,6 +57,11 @@ export async function initMindAR(container: HTMLElement, imageData: ArrayBuffer,
   // Limpar e adicionar a cena ao container
   container.innerHTML = '';
   container.appendChild(sceneEl);
+
+  // Aguardar a cena ser carregada
+  await new Promise((resolve) => {
+    sceneEl.addEventListener('loaded', resolve, { once: true });
+  });
 
   // Iniciar o MindAR
   const mindar = new (window as any).MINDAR.IMAGE({

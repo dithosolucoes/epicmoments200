@@ -22,6 +22,16 @@ export default function ARScanner() {
           return;
         }
 
+        // Verificar permissão da câmera primeiro
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          stream.getTracks().forEach(track => track.stop()); // Liberar a câmera após o teste
+        } catch (err) {
+          toast.error('Erro ao acessar a câmera. Por favor, permita o acesso à câmera.');
+          setIsLoading(false);
+          return;
+        }
+
         setLoadingText('Processando estampa...');
         const imageData = await processImageForMindAR(associations[0].stamp.image_url);
 
