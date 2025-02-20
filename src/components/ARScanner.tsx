@@ -6,7 +6,6 @@ import { processImageForMindAR, initMindAR } from '@/lib/mind-ar-utils';
 
 export default function ARScanner() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingText, setLoadingText] = useState('Iniciando scanner...');
   const { associations } = useAssociations();
@@ -26,28 +25,10 @@ export default function ARScanner() {
         setLoadingText('Processando estampa...');
         const imageData = await processImageForMindAR(associations[0].stamp.image_url);
 
-        setLoadingText('Iniciando câmera...');
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        });
-
-        if (!mounted || !containerRef.current || !videoRef.current) return;
-
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        if (!mounted || !containerRef.current) return;
 
         setLoadingText('Inicializando reconhecimento...');
-        mindarInstance = await initMindAR(containerRef.current, imageData);
-
-        // Adicionar evento de detecção
-        mindarInstance.on('targetFound', () => {
-          toast.success(`Estampa "${associations[0].stamp.name}" detectada!`);
-          // Aqui vamos adicionar o código para mostrar o vídeo
-        });
+        mindarInstance = await initMindAR(containerRef.current, imageData, associations[0].video.url);
 
         setIsLoading(false);
         toast.success('Scanner pronto!');
@@ -65,10 +46,6 @@ export default function ARScanner() {
       if (mindarInstance) {
         mindarInstance.stop();
       }
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-      }
     };
   }, [associations]);
 
@@ -84,13 +61,6 @@ export default function ARScanner() {
 
   return (
     <div ref={containerRef} className="relative w-full min-h-[400px] bg-black rounded-lg overflow-hidden">
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        className="w-full h-full object-cover"
-      />
-
       <div className="absolute top-4 left-4 right-4 bg-black/50 text-white p-3 rounded-lg backdrop-blur-sm z-10">
         <p className="text-sm text-center flex items-center justify-center gap-2">
           <Camera className="w-4 h-4" />
