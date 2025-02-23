@@ -7,9 +7,11 @@ interface CameraProps {
 
 export function Camera({ onError }: CameraProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     let stream: MediaStream | null = null;
+    let animationFrame: number | null = null;
 
     async function setupCamera() {
       try {
@@ -38,8 +40,8 @@ export function Camera({ onError }: CameraProps) {
           });
         }
 
-        if (!videoRef.current) {
-          throw new Error('Elemento de vídeo não encontrado');
+        if (!videoRef.current || !canvasRef.current) {
+          throw new Error('Elementos de vídeo ou canvas não encontrados');
         }
 
         // Limpa qualquer stream anterior
@@ -50,7 +52,34 @@ export function Camera({ onError }: CameraProps) {
 
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
-        
+
+        // Configura o canvas com o mesmo tamanho do vídeo
+        videoRef.current.onloadedmetadata = () => {
+          if (videoRef.current && canvasRef.current) {
+            canvasRef.current.width = videoRef.current.videoWidth;
+            canvasRef.current.height = videoRef.current.videoHeight;
+          }
+        };
+
+        // Inicia o loop de renderização
+        function render() {
+          if (videoRef.current && canvasRef.current) {
+            const ctx = canvasRef.current.getContext('2d');
+            if (ctx) {
+              // Desenha o frame atual do vídeo no canvas
+              ctx.drawImage(
+                videoRef.current,
+                0,
+                0,
+                canvasRef.current.width,
+                canvasRef.current.height
+              );
+            }
+          }
+          animationFrame = requestAnimationFrame(render);
+        }
+
+        render();
         toast.success('Câmera iniciada com sucesso!');
       } catch (err) {
         console.error('Erro ao configurar câmera:', err);
@@ -62,20 +91,30 @@ export function Camera({ onError }: CameraProps) {
     setupCamera();
 
     return () => {
+      // Limpa recursos
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
+      }
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
       }
     };
   }, [onError]);
 
   return (
     <div className="relative w-full h-full bg-black">
+      {/* O vídeo fica invisível, mas é necessário para capturar o stream */}
       <video
         ref={videoRef}
-        className="w-full h-full object-cover"
+        className="hidden"
         playsInline
         muted
         autoPlay
+      />
+      {/* O canvas é usado para renderizar o vídeo e as detecções */}
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full object-cover"
       />
     </div>
   );
