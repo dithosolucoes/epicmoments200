@@ -4,86 +4,115 @@ import { toast } from 'sonner';
 export function Camera() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let stream: MediaStream | null = null;
-
-    async function setupCamera() {
-      console.log('Iniciando configuração da câmera...');
+  const requestCameraPermission = async () => {
+    try {
+      // Primeiro, verifica se já temos permissão
+      const permission = await navigator.permissions.query({ name: 'camera' as PermissionName });
       
-      try {
-        console.log('Solicitando permissão da câmera...');
-        
-        // Primeiro tenta a câmera traseira
+      if (permission.state === 'denied') {
+        throw new Error('Permissão da câmera foi negada. Por favor, redefina as permissões do site nas configurações do navegador.');
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Erro ao verificar permissão:', err);
+      return false;
+    }
+  };
+
+  const setupCamera = async () => {
+    try {
+      setError(null);
+      setHasPermission(null);
+
+      // Verifica permissão primeiro
+      const hasPermission = await requestCameraPermission();
+      if (!hasPermission) {
+        throw new Error('Não foi possível obter permissão da câmera');
+      }
+
+      // Lista todas as câmeras disponíveis
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter(device => device.kind === 'videoinput');
+      console.log('Câmeras disponíveis:', cameras);
+
+      let stream: MediaStream | null = null;
+
+      // Tenta primeiro a câmera traseira em dispositivos móveis
+      if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
         try {
-          console.log('Tentando câmera traseira...');
           stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: { exact: 'environment' } }
           });
-          console.log('Câmera traseira conectada com sucesso!');
         } catch (err) {
-          // Se falhar, tenta qualquer câmera
-          console.log('Falha na câmera traseira, tentando qualquer câmera...');
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            }
-          });
-          console.log('Câmera alternativa conectada com sucesso!');
+          console.log('Falha ao tentar câmera traseira, tentando frontal...');
         }
-
-        if (!videoRef.current) {
-          throw new Error('Elemento de vídeo não encontrado');
-        }
-
-        console.log('Configurando stream no elemento de vídeo...');
-        videoRef.current.srcObject = stream;
-        
-        // Adiciona listeners para debug
-        videoRef.current.onloadedmetadata = () => {
-          console.log('Metadados do vídeo carregados');
-          if (videoRef.current) {
-            console.log(`Dimensões do vídeo: ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`);
-          }
-        };
-
-        videoRef.current.onplay = () => {
-          console.log('Vídeo começou a reproduzir');
-        };
-
-        videoRef.current.oncanplay = () => {
-          console.log('Vídeo pode ser reproduzido');
-        };
-
-        videoRef.current.onerror = (e) => {
-          console.error('Erro no elemento de vídeo:', e);
-        };
-
-        await videoRef.current.play();
-        console.log('Play() chamado no elemento de vídeo');
-        
-        setHasPermission(true);
-        toast.success('Câmera iniciada com sucesso!');
-      } catch (error) {
-        console.error('Erro detalhado ao acessar câmera:', error);
-        setHasPermission(false);
-        toast.error('Erro ao acessar câmera. Por favor, permita o acesso.');
       }
-    }
 
-    setupCamera();
-
-    return () => {
-      console.log('Limpando recursos da câmera...');
-      if (stream) {
-        stream.getTracks().forEach(track => {
-          track.stop();
-          console.log('Track da câmera parado:', track.label);
+      // Se não conseguiu a traseira ou não é mobile, tenta qualquer câmera
+      if (!stream) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
         });
+      }
+
+      if (!videoRef.current) {
+        throw new Error('Elemento de vídeo não encontrado');
+      }
+
+      // Limpa qualquer stream anterior
+      if (videoRef.current.srcObject) {
+        const oldStream = videoRef.current.srcObject as MediaStream;
+        oldStream.getTracks().forEach(track => track.stop());
+      }
+
+      // Configura o novo stream
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+      
+      setHasPermission(true);
+      toast.success('Câmera iniciada com sucesso!');
+    } catch (err) {
+      console.error('Erro ao configurar câmera:', err);
+      setError(err instanceof Error ? err.message : 'Erro desconhecido ao acessar a câmera');
+      setHasPermission(false);
+      toast.error('Erro ao acessar câmera. Por favor, verifique as permissões.');
+    }
+  };
+
+  // Limpa recursos quando o componente é desmontado
+  useEffect(() => {
+    return () => {
+      if (videoRef.current?.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
+
+  // Tenta iniciar a câmera quando o componente monta
+  useEffect(() => {
+    setupCamera();
+  }, []);
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center w-full h-full bg-black text-white text-center p-4 gap-4">
+        <p>{error}</p>
+        <button
+          onClick={() => setupCamera()}
+          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white"
+        >
+          Tentar Novamente
+        </button>
+      </div>
+    );
+  }
 
   if (hasPermission === null) {
     return (
@@ -95,8 +124,14 @@ export function Camera() {
 
   if (hasPermission === false) {
     return (
-      <div className="flex items-center justify-center w-full h-full bg-black text-white text-center p-4">
-        <p>Acesso à câmera negado. Por favor, permita o acesso e recarregue a página.</p>
+      <div className="flex flex-col items-center justify-center w-full h-full bg-black text-white text-center p-4 gap-4">
+        <p>Acesso à câmera negado. Por favor, permita o acesso nas configurações do navegador.</p>
+        <button
+          onClick={() => setupCamera()}
+          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white"
+        >
+          Tentar Novamente
+        </button>
       </div>
     );
   }
