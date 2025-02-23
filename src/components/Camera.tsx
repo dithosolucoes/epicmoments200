@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { useStampDetection, DetectedStamp } from '@/hooks/useStampDetection';
 
 interface CameraProps {
   onError?: () => void;
@@ -8,10 +9,46 @@ interface CameraProps {
 export function Camera({ onError }: CameraProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const { detectStamps, drawDetections } = useStampDetection();
 
   useEffect(() => {
     let stream: MediaStream | null = null;
     let animationFrame: number | null = null;
+    let detectionInterval: NodeJS.Timeout | null = null;
+
+    async function detectAndDraw() {
+      if (!videoRef.current || !canvasRef.current || isProcessing) return;
+
+      try {
+        setIsProcessing(true);
+        const ctx = canvasRef.current.getContext('2d');
+        if (!ctx) return;
+
+        // Obtém os dados da imagem do canvas
+        const imageData = ctx.getImageData(
+          0,
+          0,
+          canvasRef.current.width,
+          canvasRef.current.height
+        );
+
+        // Detecta estampas
+        const detections = await detectStamps(imageData);
+
+        // Se encontrou alguma estampa, desenha as detecções
+        if (detections.length > 0) {
+          drawDetections(ctx, detections);
+          toast.success(`${detections.length} estampa(s) detectada(s)!`, {
+            id: 'stamp-detection' // Evita múltiplos toasts
+          });
+        }
+      } catch (error) {
+        console.error('Erro na detecção:', error);
+      } finally {
+        setIsProcessing(false);
+      }
+    }
 
     async function setupCamera() {
       try {
@@ -80,6 +117,10 @@ export function Camera({ onError }: CameraProps) {
         }
 
         render();
+
+        // Inicia a detecção periódica
+        detectionInterval = setInterval(detectAndDraw, 1000); // Detecta a cada 1 segundo
+
         toast.success('Câmera iniciada com sucesso!');
       } catch (err) {
         console.error('Erro ao configurar câmera:', err);
@@ -98,8 +139,11 @@ export function Camera({ onError }: CameraProps) {
       if (animationFrame) {
         cancelAnimationFrame(animationFrame);
       }
+      if (detectionInterval) {
+        clearInterval(detectionInterval);
+      }
     };
-  }, [onError]);
+  }, [onError, detectStamps, drawDetections, isProcessing]);
 
   return (
     <div className="relative w-full h-full bg-black">
@@ -116,6 +160,11 @@ export function Camera({ onError }: CameraProps) {
         ref={canvasRef}
         className="w-full h-full object-cover"
       />
+      {isProcessing && (
+        <div className="absolute top-2 right-2 bg-yellow-500 text-white px-2 py-1 rounded text-sm">
+          Processando...
+        </div>
+      )}
     </div>
   );
 }
