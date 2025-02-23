@@ -5,8 +5,13 @@ import path from "path";
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {
-    host: "::",
-    port: 8080,
+    host: "localhost",
+    port: 8081,
+    https: false,
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "require-corp"
+    }
   },
   plugins: [react()],
   resolve: {

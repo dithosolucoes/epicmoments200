@@ -1,23 +1,15 @@
-
 import ARScanner from '@/components/ARScanner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, Maximize2, Camera } from 'lucide-react';
+import { ArrowLeft, Camera } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
 
 const Scanner = () => {
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
-  };
-
   return (
     <div className="min-h-screen bg-background">
       {/* Header/Navbar */}
       <header className="border-b bg-white/80 backdrop-blur-sm fixed top-0 left-0 right-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" asChild className="hover:bg-slate-100">
               <Link to="/">
@@ -29,41 +21,30 @@ const Scanner = () => {
               Scanner de Estampas
             </h1>
           </div>
-          <Button 
-            variant="outline" 
-            size="icon"
-            onClick={toggleFullscreen}
-            className="hover:bg-slate-100"
-          >
-            <Maximize2 className="h-5 w-5" />
-          </Button>
         </div>
       </header>
 
-      <main className={`pt-20 p-4 md:p-8 transition-all duration-300 ${isFullscreen ? 'max-w-full' : 'max-w-4xl mx-auto'}`}>
-        <div className="space-y-6">
-          <Card className={`p-4 transition-all duration-300 ${isFullscreen ? 'h-[80vh]' : ''}`}>
-            <ARScanner />
-          </Card>
+      {/* Main Content */}
+      <main className="container mx-auto px-4 pt-24 pb-8">
+        <Card className="max-w-2xl mx-auto">
+          <ARScanner />
+        </Card>
 
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground text-center">
-              Dica: Mantenha a câmera estável e bem iluminada para melhor detecção
-            </p>
-            
-            <div className="flex justify-center gap-4">
-              <Button variant="outline" asChild>
-                <Link to="/manage/stamps">
-                  Gerenciar Estampas
-                </Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link to="/manage/videos">
-                  Gerenciar Vídeos
-                </Link>
-              </Button>
-            </div>
-          </div>
+        <div className="mt-4 text-center text-sm text-muted-foreground max-w-2xl mx-auto">
+          <p>Dica: Mantenha a câmera estável e bem iluminada para melhor detecção</p>
+        </div>
+
+        <div className="mt-8 flex justify-center gap-4">
+          <Button asChild variant="outline">
+            <Link to="/stamps">
+              Gerenciar Estampas
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/videos">
+              Gerenciar Vídeos
+            </Link>
+          </Button>
         </div>
       </main>
     </div>

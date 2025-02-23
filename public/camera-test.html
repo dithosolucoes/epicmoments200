@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste de Câmera</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        #video-container {
+            width: 640px;
+            height: 480px;
+            background: black;
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #status {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            border-radius: 4px;
+        }
+        button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #log {
+            margin-top: 20px;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            width: 600px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">Iniciando...</div>
+    <div id="video-container">
+        <video id="video" playsinline autoplay></video>
+    </div>
+    <button onclick="startCamera()">Iniciar Câmera</button>
+    <div id="log"></div>
+
+    <script>
+        const videoElement = document.getElementById('video');
+        const statusElement = document.getElementById('status');
+        const logElement = document.getElementById('log');
+
+        function log(message) {
+            const time = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${time}] ${message}<br>`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+
+        async function startCamera() {
+            try {
+                log('Verificando suporte à câmera...');
+                if (!navigator.mediaDevices?.getUserMedia) {
+                    throw new Error('Navegador não suporta acesso à câmera');
+                }
+
+                log('Listando dispositivos...');
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cameras = devices.filter(device => device.kind === 'videoinput');
+                log(`Câmeras encontradas: ${cameras.length}`);
+                cameras.forEach(camera => {
+                    log(`- ${camera.label || 'Câmera sem nome'} (${camera.deviceId})`);
+                });
+
+                if (cameras.length === 0) {
+                    throw new Error('Nenhuma câmera encontrada');
+                }
+
+                log('Solicitando acesso à câmera...');
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    }
+                });
+
+                log('Câmera acessada com sucesso!');
+                videoElement.srcObject = stream;
+                await videoElement.play();
+                log('Vídeo iniciado!');
+                statusElement.textContent = 'Câmera ativa!';
+
+            } catch (error) {
+                log(`ERRO: ${error.message}`);
+                statusElement.textContent = `Erro: ${error.message}`;
+                if (error.name === 'NotAllowedError') {
+                    log('Dica: Verifique as permissões da câmera nas configurações do navegador');
+                }
+            }
+        }
+
+        // Inicia automaticamente
+        startCamera();
+    </script>
+</body>
+</html>
