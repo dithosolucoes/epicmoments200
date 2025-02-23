@@ -10,7 +10,7 @@ export function Camera({ onError }: CameraProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const { detectStamps, drawDetections } = useStampDetection();
+  const { detectStamps, drawDetections, isModelLoading } = useStampDetection();
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -18,7 +18,7 @@ export function Camera({ onError }: CameraProps) {
     let detectionInterval: NodeJS.Timeout | null = null;
 
     async function detectAndDraw() {
-      if (!videoRef.current || !canvasRef.current || isProcessing) return;
+      if (!videoRef.current || !canvasRef.current || isProcessing || isModelLoading) return;
 
       try {
         setIsProcessing(true);
@@ -118,8 +118,10 @@ export function Camera({ onError }: CameraProps) {
 
         render();
 
-        // Inicia a detecção periódica
-        detectionInterval = setInterval(detectAndDraw, 1000); // Detecta a cada 1 segundo
+        // Inicia a detecção periódica após um delay inicial para carregar os modelos
+        setTimeout(() => {
+          detectionInterval = setInterval(detectAndDraw, 1000); // Detecta a cada 1 segundo
+        }, 2000);
 
         toast.success('Câmera iniciada com sucesso!');
       } catch (err) {
@@ -143,7 +145,7 @@ export function Camera({ onError }: CameraProps) {
         clearInterval(detectionInterval);
       }
     };
-  }, [onError, detectStamps, drawDetections, isProcessing]);
+  }, [onError, detectStamps, drawDetections, isProcessing, isModelLoading]);
 
   return (
     <div className="relative w-full h-full bg-black">
@@ -160,9 +162,9 @@ export function Camera({ onError }: CameraProps) {
         ref={canvasRef}
         className="w-full h-full object-cover"
       />
-      {isProcessing && (
+      {(isProcessing || isModelLoading) && (
         <div className="absolute top-2 right-2 bg-yellow-500 text-white px-2 py-1 rounded text-sm">
-          Processando...
+          {isModelLoading ? 'Carregando modelos...' : 'Processando...'}
         </div>
       )}
     </div>
