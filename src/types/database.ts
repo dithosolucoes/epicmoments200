@@ -1,9 +1,9 @@
-
 export interface Stamp {
   id: string;
   created_at: string;
   name: string;
   image_url: string;
+  processed_image_url: string;
 }
 
 export interface Video {

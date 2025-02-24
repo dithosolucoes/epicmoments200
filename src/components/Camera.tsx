@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { useStampDetection, DetectedStamp } from '@/hooks/useStampDetection';
+import { useStampDetection } from '@/hooks/useStampDetection';
 
 interface CameraProps {
   onError?: () => void;
@@ -53,27 +53,16 @@ export function Camera({ onError }: CameraProps) {
     async function setupCamera() {
       try {
         // Tenta primeiro a câmera traseira em dispositivos móveis
-        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-          try {
-            stream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: { exact: 'environment' } }
-            });
-          } catch (err) {
-            // Se falhar, tenta qualquer câmera
-            stream = await navigator.mediaDevices.getUserMedia({
-              video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-              }
-            });
-          }
-        } else {
-          // Em desktop, usa configuração padrão
+        const constraints = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+          ? { video: { facingMode: { exact: 'environment' } } }
+          : { video: { width: { ideal: 1280 }, height: { ideal: 720 } } };
+
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (err) {
+          // Se falhar com a câmera traseira, tenta qualquer câmera
           stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            }
+            video: { width: { ideal: 1280 }, height: { ideal: 720 } }
           });
         }
 
@@ -81,22 +70,40 @@ export function Camera({ onError }: CameraProps) {
           throw new Error('Elementos de vídeo ou canvas não encontrados');
         }
 
+        // Configura o tamanho do canvas antes de tudo
+        canvasRef.current.width = 1280;
+        canvasRef.current.height = 720;
+
         // Limpa qualquer stream anterior
         if (videoRef.current.srcObject) {
           const oldStream = videoRef.current.srcObject as MediaStream;
           oldStream.getTracks().forEach(track => track.stop());
         }
 
+        // Configura o novo stream
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-
-        // Configura o canvas com o mesmo tamanho do vídeo
-        videoRef.current.onloadedmetadata = () => {
-          if (videoRef.current && canvasRef.current) {
+        
+        // Espera o vídeo carregar
+        await new Promise<void>((resolve, reject) => {
+          if (!videoRef.current) return reject(new Error('Video element not found'));
+          
+          videoRef.current.onloadedmetadata = () => {
+            if (!videoRef.current || !canvasRef.current) return reject(new Error('Elements not found'));
+            
+            // Atualiza o tamanho do canvas com base no vídeo
             canvasRef.current.width = videoRef.current.videoWidth;
             canvasRef.current.height = videoRef.current.videoHeight;
-          }
-        };
+            
+            resolve();
+          };
+          
+          videoRef.current.onerror = () => {
+            reject(new Error('Failed to load video'));
+          };
+        });
+
+        // Inicia a reprodução do vídeo
+        await videoRef.current.play();
 
         // Inicia o loop de renderização
         function render() {
@@ -126,7 +133,7 @@ export function Camera({ onError }: CameraProps) {
         toast.success('Câmera iniciada com sucesso!');
       } catch (err) {
         console.error('Erro ao configurar câmera:', err);
-        toast.error('Erro ao iniciar câmera');
+        toast.error('Erro ao iniciar câmera. Por favor, verifique as permissões.');
         onError?.();
       }
     }

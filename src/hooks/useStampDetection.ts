@@ -72,17 +72,29 @@ export function useStampDetection() {
     console.log('Iniciando detecção de estampas...');
 
     try {
-      // 1. Converte ImageData para tensor
-      console.log('Convertendo imagem para tensor...');
-      const tensor = tf.browser.fromPixels(imageData);
+      // 1. Converte ImageData para tensor e processa
+      console.log('Processando imagem...');
+      const processedImageUrl = await processImageForAR(imageData);
+      const processedImage = await createImageBitmap(await fetch(processedImageUrl).then(r => r.blob()));
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = processedImage.width;
+      canvas.height = processedImage.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Não foi possível criar contexto 2D');
+      
+      ctx.drawImage(processedImage, 0, 0);
+      const processedData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      
+      const tensor = tf.browser.fromPixels(processedData);
       const normalized = tf.div(tensor, 255);
       
-      // 2. Detecta objetos na imagem
+      // 2. Detecta objetos na imagem processada
       console.log('Detectando objetos...');
       const predictions = await modelRef.current.estimateFaces(normalized, false);
       console.log(`Encontrados ${predictions.length} objetos`);
       
-      // 3. Para cada região detectada, tenta fazer OCR
+      // 3. Para cada região detectada, tenta fazer OCR em uma área reduzida
       const detectedStamps: DetectedStamp[] = [];
       
       for (const pred of predictions) {
@@ -90,29 +102,48 @@ export function useStampDetection() {
         const [x, y] = topLeft;
         const [x2, y2] = bottomRight;
         
-        console.log('Analisando região:', { x, y, x2, y2, confidence: probability[0] });
-        
-        // Extrai a região da imagem
+        // Reduz a área de OCR em 20% para focar no centro
+        const margin = 0.2;
         const width = x2 - x;
         const height = y2 - y;
+        const adjustedX = x + width * margin;
+        const adjustedY = y + height * margin;
+        const adjustedWidth = width * (1 - margin * 2);
+        const adjustedHeight = height * (1 - margin * 2);
         
-        // Faz OCR na região
+        console.log('Analisando região ajustada:', { 
+          x: adjustedX, 
+          y: adjustedY, 
+          width: adjustedWidth, 
+          height: adjustedHeight,
+          confidence: probability[0]
+        });
+        
+        // Faz OCR na região reduzida
         console.log('Iniciando OCR na região...');
         const { data: { text } } = await workerRef.current.recognize(imageData, {
-          rectangle: { left: x, top: y, width, height }
+          rectangle: { 
+            left: adjustedX, 
+            top: adjustedY, 
+            width: adjustedWidth, 
+            height: adjustedHeight 
+          }
         });
         console.log('Texto detectado:', text);
+        
+        if (!text.trim()) continue; // Pula se não encontrou texto
         
         // Verifica se o texto detectado corresponde a alguma estampa no banco
         console.log('Consultando banco de dados...');
         const { data: stamps, error } = await supabase
           .from('stamps')
-          .select('id, name')
+          .select('id, name, processed_image_url')
           .ilike('name', `%${text}%`)
           .limit(1);
 
         if (error) {
           console.error('Erro ao consultar banco:', error);
+          continue;
         }
         
         if (stamps && stamps.length > 0) {
@@ -121,10 +152,10 @@ export function useStampDetection() {
             id: stamps[0].id,
             confidence: probability[0],
             boundingBox: {
-              x: x,
-              y: y,
-              width: width,
-              height: height
+              x: adjustedX,
+              y: adjustedY,
+              width: adjustedWidth,
+              height: adjustedHeight
             }
           });
         }

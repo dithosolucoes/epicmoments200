@@ -9,8 +9,18 @@ export const useStamps = () => {
   const { data: stamps = [], isLoading } = useQuery({
     queryKey: ['stamps'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('stamps').select('*');
-      if (error) throw error;
+      console.log('Buscando estampas...');
+      const { data, error } = await supabase
+        .from('stamps')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erro ao buscar estampas:', error);
+        throw error;
+      }
+
+      console.log('Estampas encontradas:', data);
       return data as Stamp[];
     },
   });
@@ -20,45 +30,62 @@ export const useStamps = () => {
       try {
         console.log('Iniciando upload da estampa:', { name, fileSize: file.size, fileType: file.type });
 
-        // 1. Upload do arquivo
+        // 1. Upload da imagem original
         const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random()}.${fileExt}`;
-        const filePath = `stamps/${fileName}`;
-
-        console.log('Fazendo upload para:', filePath);
-
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const originalFileName = `original_${Math.random()}.${fileExt}`;
+        
+        console.log('Fazendo upload da imagem original:', originalFileName);
+        const { data: originalUpload, error: originalError } = await supabase.storage
           .from('stamps')
-          .upload(filePath, file, {
+          .upload(originalFileName, file, {
             cacheControl: '3600',
             upsert: false
           });
 
-        if (uploadError) {
-          console.error('Erro no upload:', uploadError);
-          throw new Error(`Erro no upload: ${uploadError.message}`);
+        if (originalError) {
+          console.error('Erro no upload original:', originalError);
+          throw new Error(`Erro no upload original: ${originalError.message}`);
         }
 
-        console.log('Upload concluído:', uploadData);
-
-        // 2. Obtém a URL pública
-        const { data: urlData, error: urlError } = await supabase.storage
+        // 2. Obter URL pública da imagem original
+        const { data: originalUrlData } = await supabase.storage
           .from('stamps')
-          .getPublicUrl(filePath);
+          .getPublicUrl(originalFileName);
 
-        if (urlError) {
-          console.error('Erro ao obter URL:', urlError);
-          throw new Error(`Erro ao obter URL: ${urlError.message}`);
+        // 3. Processar imagem para AR
+        console.log('Processando imagem para AR...');
+        const processedImageUrl = await processImageForAR(originalUrlData.publicUrl);
+        const processedBlob = await fetch(processedImageUrl).then(res => res.blob());
+        
+        // 4. Upload da imagem processada
+        const processedFileName = `processed_${originalFileName}`;
+        console.log('Fazendo upload da imagem processada:', processedFileName);
+        
+        const { data: processedUpload, error: processedError } = await supabase.storage
+          .from('stamps')
+          .upload(processedFileName, processedBlob, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (processedError) {
+          console.error('Erro no upload processado:', processedError);
+          throw new Error(`Erro no upload processado: ${processedError.message}`);
         }
 
-        console.log('URL obtida:', urlData);
+        // 5. Obter URL pública da imagem processada
+        const { data: processedUrlData } = await supabase.storage
+          .from('stamps')
+          .getPublicUrl(processedFileName);
 
-        // 3. Insere no banco
+        // 6. Inserir no banco
+        console.log('Inserindo no banco...');
         const { data: insertData, error: insertError } = await supabase
           .from('stamps')
           .insert({
             name,
-            image_url: urlData.publicUrl,
+            image_url: originalUrlData.publicUrl,
+            processed_image_url: processedUrlData.publicUrl
           })
           .select()
           .single();
@@ -68,7 +95,7 @@ export const useStamps = () => {
           throw new Error(`Erro na inserção: ${insertError.message}`);
         }
 
-        console.log('Inserção concluída:', insertData);
+        console.log('Upload completo:', insertData);
         return insertData;
       } catch (error) {
         console.error('Erro completo:', error);
@@ -90,12 +117,14 @@ export const useStamps = () => {
       const stamp = stamps.find(s => s.id === id);
       if (!stamp) throw new Error('Estampa não encontrada');
 
-      // Remove o arquivo do storage
-      const fileName = stamp.image_url.split('/').pop();
-      if (fileName) {
+      // Remove os arquivos do storage
+      const originalFileName = stamp.image_url.split('/').pop();
+      const processedFileName = stamp.processed_image_url.split('/').pop();
+
+      if (originalFileName && processedFileName) {
         const { error: storageError } = await supabase.storage
           .from('stamps')
-          .remove([`stamps/${fileName}`]);
+          .remove([originalFileName, processedFileName]);
 
         if (storageError) throw storageError;
       }
