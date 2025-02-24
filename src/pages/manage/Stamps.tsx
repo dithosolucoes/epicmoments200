@@ -259,12 +259,21 @@ const StampsManager = () => {
                   key={stamp.id}
                   className="border rounded-lg p-3 md:p-4 space-y-2 hover:border-epic-blue/40 transition-colors group"
                 >
+                  {/* Debug info */}
+                  <pre className="text-xs bg-slate-100 p-2 rounded overflow-auto">
+                    {JSON.stringify(stamp, null, 2)}
+                  </pre>
+
                   <div className="aspect-square rounded-lg overflow-hidden bg-slate-100 relative group">
                     <img
                       src={stamp.image_url}
                       alt={stamp.name}
                       className="w-full h-full object-cover transition-transform group-hover:scale-105"
                       loading="lazy"
+                      onError={(e) => {
+                        console.error('Erro ao carregar imagem:', stamp.image_url);
+                        e.currentTarget.src = 'https://placehold.co/400x400?text=Erro+ao+carregar';
+                      }}
                     />
                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                       <Button
