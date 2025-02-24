@@ -32,7 +32,7 @@ export const useStamps = () => {
 
         // 1. Upload da imagem original
         const fileExt = file.name.split('.').pop();
-        const originalFileName = `original_${Math.random()}.${fileExt}`;
+        const originalFileName = `original_${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`;
         
         console.log('Fazendo upload da imagem original:', originalFileName);
         const { data: originalUpload, error: originalError } = await supabase.storage
@@ -52,40 +52,69 @@ export const useStamps = () => {
           .from('stamps')
           .getPublicUrl(originalFileName);
 
+        if (!originalUrlData?.publicUrl) {
+          throw new Error('URL pública da imagem original não encontrada');
+        }
+
+        console.log('URL da imagem original:', originalUrlData.publicUrl);
+
         // 3. Processar imagem para AR
         console.log('Processando imagem para AR...');
-        const processedImageUrl = await processImageForAR(originalUrlData.publicUrl);
-        const processedBlob = await fetch(processedImageUrl).then(res => res.blob());
+        let processedImageUrl;
+        try {
+          processedImageUrl = await processImageForAR(originalUrlData.publicUrl);
+          console.log('Imagem processada com sucesso:', processedImageUrl);
+        } catch (error) {
+          console.error('Erro ao processar imagem:', error);
+          // Se falhar o processamento, usa a imagem original
+          processedImageUrl = originalUrlData.publicUrl;
+        }
         
         // 4. Upload da imagem processada
         const processedFileName = `processed_${originalFileName}`;
         console.log('Fazendo upload da imagem processada:', processedFileName);
         
-        const { data: processedUpload, error: processedError } = await supabase.storage
-          .from('stamps')
-          .upload(processedFileName, processedBlob, {
-            cacheControl: '3600',
-            upsert: false
-          });
+        let processedUploadUrl = originalUrlData.publicUrl; // fallback para a original
+        
+        try {
+          const processedBlob = await fetch(processedImageUrl).then(res => res.blob());
+          const { data: processedUpload, error: processedError } = await supabase.storage
+            .from('stamps')
+            .upload(processedFileName, processedBlob, {
+              cacheControl: '3600',
+              upsert: false
+            });
 
-        if (processedError) {
-          console.error('Erro no upload processado:', processedError);
-          throw new Error(`Erro no upload processado: ${processedError.message}`);
+          if (processedError) {
+            throw processedError;
+          }
+
+          // 5. Obter URL pública da imagem processada
+          const { data: processedUrlData } = await supabase.storage
+            .from('stamps')
+            .getPublicUrl(processedFileName);
+
+          if (processedUrlData?.publicUrl) {
+            processedUploadUrl = processedUrlData.publicUrl;
+          }
+        } catch (error) {
+          console.error('Erro no upload da imagem processada:', error);
+          // Continua usando a URL original como fallback
         }
 
-        // 5. Obter URL pública da imagem processada
-        const { data: processedUrlData } = await supabase.storage
-          .from('stamps')
-          .getPublicUrl(processedFileName);
-
         // 6. Inserir no banco
-        console.log('Inserindo no banco...');
+        console.log('Inserindo no banco...', {
+          name,
+          image_url: originalUrlData.publicUrl,
+          processed_image_url: processedUploadUrl
+        });
+
         const { data: insertData, error: insertError } = await supabase
           .from('stamps')
           .insert({
             name,
             image_url: originalUrlData.publicUrl,
-            processed_image_url: processedUrlData.publicUrl
+            processed_image_url: processedUploadUrl
           })
           .select()
           .single();
